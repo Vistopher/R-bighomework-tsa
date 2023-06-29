@@ -1,0 +1,5 @@
+"0","stock <- read_excel(""stock.xlsx"")"
+"0","names(stock) <- c(""Date"",""Price"",""PriceChange"")"
+"0","stock$Date <- ymd(stock$Date)"
+"0","stock <- stock[order(stock$Date),]"
+"0","stock"

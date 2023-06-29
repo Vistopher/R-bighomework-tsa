@@ -1,0 +1,44 @@
+---
+title: "test"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+```{r}
+quarterly <- read_excel("quarterly.xls")
+
+# Extract the necessary variables
+delta_lipt <- diff(log(quarterly$IndProd))
+inft <- diff(log(quarterly$CPI))
+
+# Perform ADF test
+adf_delta_lipt <- adf.test(delta_lipt)
+adf_inft <- adf.test(inft)
+# Print the test results
+cat("ADF test for Δlipt:\n")
+print(adf_delta_lipt)
+
+cat("\nADF test for inft:\n")
+print(adf_inft)
+```

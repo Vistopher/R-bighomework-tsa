@@ -1,0 +1,3 @@
+"0","ggplot(data = stock, aes(x = Date, y = Price,group = 1)) +"
+"0","  geom_line() +"
+"0","  labs(title = ""Stock Price Over Time"", x = ""Date"", y = ""Price"")"

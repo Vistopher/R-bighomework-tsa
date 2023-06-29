@@ -1,0 +1,4 @@
+"0","coef_matrix <- as.matrix(coef(var_model)$varresult$A, ncol = length(var_model$varresult$A))  # 获取估计的系数矩阵并转换为数值矩阵"
+"2","Error in array(x, c(length(x), 1L), if (!is.null(names(x))) list(names(x),  : 
+  'data' must be of a vector type, was 'NULL'
+"

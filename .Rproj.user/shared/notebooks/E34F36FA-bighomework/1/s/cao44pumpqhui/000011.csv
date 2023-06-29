@@ -1,0 +1,3 @@
+"0","# 获取igarch(1,1)建模后的标准化残差"
+"0","st_re <- residuals(igarch_fit, standardize = TRUE)"
+"0","st_re_2<-st_re^2"

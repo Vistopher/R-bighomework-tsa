@@ -1,0 +1,6 @@
+"0","# 创建时间序列对象"
+"0","delta_lip_ts <- ts(delta_lip, start = c(1960, 1), frequency = 4)"
+"0","inf_ts <- ts(inf, start = c(1960, 1), frequency = 4)"
+"0",""
+"0","# 绘制折线图"
+"0","plot(delta_lip_ts, type = ""n"", col = ""blue"", xlab = ""时间"", ylab = ""值"", main = ""工业生产变化率和通货膨胀率"")"

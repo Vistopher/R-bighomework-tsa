@@ -1,0 +1,1 @@
+"0","lines(var_density$x, norm_density, col = ""red"", lty = 3)  # 添加标准正态分布密度函数"

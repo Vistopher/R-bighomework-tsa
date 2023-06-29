@@ -1,0 +1,5 @@
+"0","# 获取工业生产和居民消费价格指数的对数变化率"
+"0","delta_lip<-diff(log(quarterly$IndProd))"
+"0","inf<-diff(log(quarterly$CPI))"
+"0","# 获取工业生产额对数变化率和通货膨胀率的时间趋势折线图"
+"0","plot(delta_lip, type = ""l"", main = ""delta_lip Trend"", xlab = ""Time"", ylab = ""Values"")"

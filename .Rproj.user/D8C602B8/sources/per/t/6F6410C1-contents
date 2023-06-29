@@ -1,0 +1,426 @@
+---
+title: "big-homework"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+# Q1
+
+## The Model of the Mean
+
+```{r}
+library("readxl")
+library(tidyverse) # Wickham的数据整理的整套工具
+library(lubridate) # 日期和日期时间数据处理
+library(quantmod)  # 金融数据的整理与作图功能
+```
+
+```{r}
+stock <- read_excel("stock.xlsx")
+names(stock) <- c("Date","Price","PriceChange")
+stock$Date <- ymd(stock$Date)
+stock <- stock[order(stock$Date),]
+stock
+```
+
+```{r}
+ggplot(data = stock, aes(x = Date, y = Price,group = 1)) +
+  geom_line() +
+  labs(title = "Stock Price Over Time", x = "Date", y = "Price")
+```
+
+画出每日收盘价的折线图，明显看出不平稳.
+
+定义$PriceChange=ln(Price_t/Price_{t-1})$，画出折线图。
+
+```{r}
+ggplot(data = stock, aes(x = Date, y = PriceChange ,group = 1)) +
+  geom_line() +
+  labs(title = "Stock Price Change Over Time", x = "Date", y = "Price Change")
+```
+
+对数变化率可能存在恒定均值，异方差，有波动率聚集的情形。
+
+```{r}
+stock$PriceChange[is.na(stock$PriceChange)]<-0
+mean<-mean(stock$PriceChange)
+var<-var(stock$PriceChange)
+mean
+var
+```
+
+对数价格变化率均值为-0.0002800659,方差为0.002226145。
+
+```{r}
+# 计算密度函数
+var_density <- density(stock$PriceChange)  # 变量的密度函数
+var_mean <- mean(stock$PriceChange)  # 变量的均值
+var_sd <- sd(stock$PriceChange)  # 变量的标准差
+df <- length(stock$PriceChange) - 1  # 自由度
+
+# 计算标准t密度函数
+t_density <- dt(var_density$x, df = df,0)  # 标准t密度函数
+t_density <- t_density / max(t_density)  # 归一化处理
+
+
+# 计算标准正态分布密度函数
+norm_density <- dnorm(var_density$x, mean = var_mean, sd = var_sd) # 标准正态分布密度函数
+
+# 绘制图形
+plot(var_density, type = "l", main = "Density Comparison", xlab = "Value", ylab = "Density")
+lines(var_density$x, t_density, col = "blue", lty = 2)  # 添加标准t密度函数
+lines(var_density$x, norm_density, col = "red", lty = 3)  # 添加标准正态分布密度函数
+legend("topright", c("Variable", "t Distribution", "Normal Distribution"), lty = c(1, 2, 3), col = c("black", "blue", "red"))
+
+```
+
+```{r}
+# 计算数据集的均值和标准差
+data_mean <- mean(stock$PriceChange)
+data_sd <- sd(stock$PriceChange)
+
+# 计算数据集的密度函数
+var_density <- density(stock$PriceChange)
+
+# 计算标准t分布的概率密度函数
+df <- length(stock$PriceChange) - 1  # 自由度
+t_density <- dt(var_density$x, df = df)
+
+# 计算标准正态分布的概率密度函数
+norm_density <- dnorm(var_density$x, mean = data_mean, sd = data_sd)
+
+# 绘制图形
+plot(var_density, type = "l", main = "Density Comparison", xlab = "Value", ylab = "Density")
+lines(var_density$x, t_density, col = "blue", lty = 2)  # 添加标准t密度函数
+lines(var_density$x, norm_density, col = "red", lty = 3)  # 添加标准正态分布密度函数
+legend("topright", c("Variable", "t Distribution", "Normal Distribution"), lty = c(1, 2, 3), col = c("black", "blue", "red"))
+```
+
+```{r}
+library(xts)
+ts.stock <- xts(stock$PriceChange, stock$Date)
+```
+
+```{r}
+forecast::Acf(ts.stock,lag.max=50,main="")
+pacf(ts.stock, lag.max=50,main="")
+```
+
+ACF和PACF图都呈振荡衰减，说明可用ARMA模型来初步拟合。
+
+TSA包还提供了`armasubsets()`函数用来选择ARMA模型阶， 办法是用长阶自回归获得新息的估计， 然后用普通最小二乘估计ARMA系数， 用回归的自变量选择方法进行模型选择。 如：
+
+```{r}
+library(TSA)
+resr <- TSA::armasubsets(ts.stock, nar = 12, nma = 12)
+plot(resr)
+```
+
+第一行和第二行BIC值一样，因为模型越简约越好，所以可以选择第一行，也即ARMA模型中4、5、6、8、9阶自回归滞后项和3、4阶误差滞后项。
+
+```{r}
+# 也可以用forecasts包的auto.arima()函数定阶：
+forecast::auto.arima(ts.stock, max.p = 12, max.q = 12, max.P = 1, max.Q = 1)
+```
+
+ARIMA选择了一个ARIMA(2,0,3)模型。
+
+## Testing for GARCH errors
+
+```{r}
+# 拟合ARMA模型并获取残差
+arma_model <- arima(stock$PriceChange, order = c(2,0,3))  # 使用适当的p、d、q值
+re <- residuals(arma_model)  # 获取ARMA模型的残差
+
+# 计算残差平方
+re_2 <- re^2
+```
+
+```{r}
+install.packages("nortsTest", dependencies = TRUE)
+```
+
+```{r}
+# 加载需要的包
+library(nortsTest)
+# 进行ARCH效应检验
+arch.test(re_2,arch = c("box","Lm"),alpha = 0.05,lag.max = 5)
+```
+
+由Box-Ljung 检验可知存在ARCH效应。
+
+## Alternative Estimates of the Model
+
+```{r}
+install.packages("fGarch")
+```
+
+```{r}
+
+# 从GARCH(1,1)开始尝试
+library(fGarch)
+
+# 拟合ARMA(2,3)+GARCH(1,1)模型, 使用正态分布进行极大似然参数估计
+garch_fit_1<- garchFit(formula = ~arma(2,3)+garch(1, 1),data = stock$PriceChange,cond.dist = "norm")
+
+summary(garch_fit_1)
+```
+
+\$\$
+
+```{r}
+# 拟合ARMA(2,3)+GARCH(1,1)模型, 使用t分布进行极大似然参数估计
+garch_fit_2<- garchFit(formula = ~ arma(2,3)+garch(1, 1),data = stock$PriceChange,cond.dist = "std")
+
+summary(garch_fit_2)
+```
+
+${\varepsilon_{t-1}}^2和h_{t-1}的系数之和接近于1，结合前述估计结果以及r_t的概率密度函数，我们可以用IGARCH(1,1)用t分布估计$
+
+```{r}
+# 拟合ARMA(2,3)+IGARCH(1,1)模型, 使用t分布进行极大似然参数估计
+library(rugarch)
+speci <- ugarchspec(
+  mean.model = list(
+    armaOrder=c(2,3),
+    include.mean=TRUE  ),
+  variance.model = list(
+    model = "iGARCH", # itegrated GARCH model
+    garchOrder = c(1,1) ) )
+igarch_fit <- ugarchfit(spec = speci, data = stock$PriceChange,cond.dist = "std")
+show(igarch_fit)
+```
+
+## Diagnostic Checking
+
+$现在我们需要知道上述IGARCH(1,1)模型是否通过了多种诊断检验，所有的诊断检验建立在标准化的残差之上，$$变化如下：s_t=\hat{\varepsilon_t}/\hat{h_t}^{0.5}$
+
+### Remaining serial correlation:
+
+$Ljung-Box 统计量Q(1)p值为3.511e-01，在5\%显著性水平不显著，拒绝原假设，认为\{s_t\}不存在序列相关$
+
+### Remaining GARCH effects:
+
+$Ljung-Box 统计量Q(3),Q(5),Q(7)p值分别为0.6047, 0.6440, 0.6582，在5\%显著性水平下不显著，接受原假设，认为\{s_t^2\}不存在序列相关$
+
+$综上，可基本认为\{s_t\}和\{s_t^2\}为白噪声序列，上述ARMA和GARCH建模充分。$
+
+### Leverage effects：
+
+```{r}
+# 获取igarch(1,1)建模后的标准化残差
+st_re <- residuals(igarch_fit, standardize = TRUE)
+# 获取标准化残差的平方
+st_re_2<-st_re^2
+```
+
+```{r}
+# 标准化残差平方的ACF，进一步证实GARCH(1,1)模型的充分
+forecast::Acf(st_re_2,lag.max=25,main="")
+```
+
+```{r}
+# 构建标准化残差平方的自回归模型，先用AIC定阶，选择0阶。
+mod1 <- ar(st_re_2)
+mod1
+```
+
+```{r}
+# 构建因变量为标准化残差平方，自变量为标准化残差的自回归模型
+# 若不存在杠杆效应，则方程应联合不显著
+mod2<- lm(st_re_2 ~ lag(st_re,1) + lag(st_re,2)+lag(st_re,3)+lag(st_re,4)+lag(st_re,5)+lag(st_re,6)+lag(st_re,7)+lag(st_re,8)+lag(st_re,9)+lag(st_re,10))
+summary(mod2)
+```
+
+F统计量为1.376，对应p值为0.1873，故不存在杠杆效应。
+
+# Q2
+
+## a
+
+```{r}
+quarterly <- read_excel("quarterly.xls")
+head(quarterly)
+tail(quarterly)
+```
+
+```{r}
+# 获取工业生产和居民消费价格指数的对数变化率
+delta_lip<-diff(log(quarterly$IndProd))
+inf<-diff(log(quarterly$CPI))
+# 获取工业生产额对数变化率和通货膨胀率的时间趋势折线图
+plot(delta_lip, type = "l", main = "delta_lip Trend", xlab = "Time", ylab = "Values")
+plot(inf, type = "l", main = "inf Trend", xlab = "Time", ylab = "Values")
+```
+
+```{r}
+install.packages("fUnitRoots")
+```
+
+```{r}
+# 对delta_lip和inf进行单位根检验
+library(tseries)
+library(fUnitRoots)
+# 删除缺失值
+quarterly<- na.omit(quarterly)
+# 用AIC确定ADF基础模型所需的AR阶数p
+ar(delta_lip, method="mle")
+ar(inf,method="mle")
+# 进行单位根检验
+fUnitRoots::adfTest(delta_lip, lags=12, type="ct")
+fUnitRoots::adfTest(inf, lags=3, type="ct")
+```
+
+$\{\Delta{lip_t}\}序列的DF统计量为-4.6886，对应p值为0.01，故有95\%的把握认为该序列平稳。$
+
+$\{\Delta\inf_t\}序列的DF统计量为-3.3475，对应p值为0.06464，故有95\%的把稳认为存在单位根，不平稳。$
+
+## b
+
+```{r}
+# 创建时间序列对象
+delta_lip_ts <- ts(delta_lip, start = c(1960, 1), frequency = 4)
+inf_ts <- ts(inf, start = c(1960, 1), frequency = 4)
+
+# 绘制折线图
+plot(delta_lip_ts, type = "n", col = "blue", xlab = "时间", ylab = "值", main = "工业生产变化率和通货膨胀率")
+lines(delta_lip_ts, type = "l", col = "blue")
+lines(inf_ts, type = "l", col = "red")
+
+# 添加图例
+legend("topright", legend = c("delta_lip", "inf"), col = c("blue", "red"), lty = 1)
+
+# 显示图形
+```
+
+由图可知工业生产变化率和通货膨胀率大致满足协整关系。
+
+```{r}
+install.packages("vars")
+```
+
+```{r}
+library(vars)
+# 用选择变量创建数据框
+data <- data.frame(delta_lip_ts, inf_ts)
+
+# 确定滞后阶数
+lag_order <- 3
+
+# 估计VAR模型
+var_model <- VAR(data, p = lag_order, type = "const")
+
+# 保存残差
+residuals <- residuals(var_model)
+
+# 展示估计结果
+summary(var_model)
+```
+
+```{r}
+# 找出AIC,SBC和一般到特殊方法选择的最优滞后阶数
+VARselect(data, lag.max = 5, type = "const")
+```
+
+SBC选择的最优滞后阶数是3，AIC选择的最优滞后阶数是5。
+
+## c
+
+```{r}
+# 使用格兰杰因果检验
+causality(var_model, cause = "delta_lip_ts")
+causality(var_model, cause = "inf_ts")
+```
+
+Granger因果性检验显示: 通货膨胀率和工业生产之间存在双向的Granger因果关系。所提供的F统计量和显著性水平与给定信息相符。
+
+## d
+
+```{r}
+# 计算方差分解
+var_decomp <- irf(var_model, response = "inf_ts", boot = TRUE)
+
+#提取不同时间范围内的方差分解结果
+var_decomp_values <- var_decomp$irf
+
+# 打印方差分解
+cat("        Proportion due to Δlipt shock (%)   Proportion due to inft shock (%)\n")
+cat("Horizon       Δlipt          inft                 Δlipt            inft\n")
+
+for (horizon in c(1, 4, 8)) {
+  prop_delta_lip_ts <- var_decomp_values$delta_lip_ts[horizon] * 10000
+  prop_inf_ts <- var_decomp_values$inf_ts[horizon] * 10000
+  prop_delta_lip_ts_complement <- 100 - prop_delta_lip_ts
+  prop_inf_ts_complement <- 100 - prop_inf_ts
+  
+  cat(horizon, "         ", prop_delta_lip_ts , "       ",  prop_inf_ts , "         ",  prop_delta_lip_ts_complement, "         ",  prop_inf_ts_complement , "\n")
+}
+
+```
+
+```{r}
+coef(var_model,complete=FALSE)
+coef_matrix <- as.matrix(unlist(coef(var_model))) # 获取估计的系数矩阵并转换为数值矩阵
+coef_matrix
+# 进行 Cholesky 分解
+cholesky_decomp <- chol(coef_matrix)
+
+# 提取方差分解系数
+var_decomp <- t(cholesky_decomp)
+
+# 打印方差分解系数
+print(var_decomp)
+
+```
+
+```{r}
+coef_matrix <- coef(var_model)$varresult$A  # 获取估计的系数矩阵
+
+# 将系数矩阵转换为数值矩阵
+coef_matrix_numeric <- matrix(as.numeric(coef_matrix), nrow = ncol(coef_matrix), byrow = TRUE)
+
+# 进行 Cholesky 分解
+cholesky_decomp <- chol(coef_matrix_numeric)
+
+# 提取方差分解系数
+var_decomp <- t(cholesky_decomp)
+
+# 打印方差分解系数
+print(var_decomp)
+
+```
+
+```{r}
+coef_matrix <- as.matrix(coef(var_model)$varresult$A, ncol = length(var_model$varresult$A))  # 获取估计的系数矩阵并转换为数值矩阵
+
+# 进行 Cholesky 分解
+cholesky_decomp <- chol(coef_matrix)
+
+# 提取方差分解系数
+var_decomp <- t(cholesky_decomp)
+
+# 打印方差分解系数
+print(var_decomp)
+
+```

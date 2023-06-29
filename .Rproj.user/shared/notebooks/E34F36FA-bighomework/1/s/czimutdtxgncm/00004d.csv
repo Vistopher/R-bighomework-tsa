@@ -1,0 +1,1 @@
+"0","lines(var_density$x, t_density, col = ""blue"", lty = 2)  # 添加标准t密度函数"

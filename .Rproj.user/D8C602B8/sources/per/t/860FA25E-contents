@@ -1,0 +1,332 @@
+---
+title: "Homework"
+author: ""
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE,message = FALSE)
+```
+
+```{r}
+library(lubridate)
+library(tidyverse)
+theme_set(theme_bw() + theme(plot.title = element_text(hjust = 0.5)))
+library(readxl)
+library(forecast)
+library(tseries)
+
+library(rugarch)
+library(xts)
+library(vars)
+```
+
+## Q1
+
+This dataset provides the closing prices and returns of Senxuan Pharmaceuticals' stock from July 27, 2020, to May 15, 2023.
+
+
+
+
+```{r}
+stock <- read_excel("stock.xlsx")
+names(stock) <- c("Date","Price","Return")
+stock$Date <- ymd(stock$Date)
+stock <- stock[order(stock$Date), ]
+```
+
+
+```{r}
+ggplot(data = stock, aes(x = Date, y = Price,group = 1)) +
+  geom_line() +
+  labs(title = "Stock Price Over Time", x = "Date", y = "Price")
+```
+
+
+From the graph, it can be observed that prior to 2022, the stock price of  (Senxuan Pharmaceuticals) remained relatively stable with low volatility. However, starting from 2022, there was a significant upward trend in the stock price. During this period, the stock price experienced a substantial increase, indicating optimism and investor enthusiasm in the market for this stock.
+
+However, in the later part of 2022, there was a sharp decline in the stock price. During this period, the stock price went through a significant downward phase, potentially influenced by market factors, company performance, or other impacting factors. This downward trend reflects investor concerns and market uncertainty.
+
+```{r}
+adf.test(stock$Price)
+```
+
+For the original stock$Price data series, the Augmented Dickey-Fuller test statistic is -1.6555, with a corresponding p-value of 0.7241. Since the p-value is greater than commonly used significance levels (e.g., 0.05), we fail to reject the null hypothesis. This indicates that the original series has a unit root and is non-stationary.
+
+
+
+```{r}
+adf.test(diff(stock$Price,1))
+```
+
+
+
+However, for the differenced series diff(stock$Price, 1), the Augmented Dickey-Fuller test statistic is -8.5918, with a corresponding p-value of 0.01. In this case, the p-value is less than the significance level, allowing us to reject the null hypothesis. This suggests that the differenced series after one order of differencing is stationary.
+
+
+
+```{r}
+# Convert the Price column to a time series object
+xts_price <- xts(stock$Price, order.by = stock$Date)
+
+# Perform a differential on the Price column
+diff_xts_price <- na.omit(diff(xts_price))
+
+```
+
+In conclusion, by applying a first-order difference, we have successfully transformed the original non-stationary series stock$Price into a stationary series diff(stock$Price, 1). This stationary series can be used for modeling and forecasting using the GARCH model.
+
+
+
+
+
+
+I performed a GARCH (1,1) model estimation on the differenced series diff_xts_price using the ugarchfit function in R with the following specification:
+
+- Variance model: sGARCH (1,1)
+- Mean model: ARFIMA (0,0,0)
+- Distribution: Normal
+
+
+
+```{r}
+# Define GARCH model
+spec <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(0, 0)))
+
+# Estimating the GARCH model
+fit <- ugarchfit(spec, data = diff_xts_price,)
+
+fit
+```
+
+
+The estimated GARCH model results are as follows:
+
+
+Optimal Parameters:
+- mu: -0.000002 (standard error: 0.005936)
+- omega: 0.001608 (standard error: 0.000734)
+- alpha1: 0.314016 (standard error: 0.064636)
+- beta1: 0.684984 (standard error: 0.063744)
+
+The model log-likelihood is 0.2076428, and the information criteria indicate a relatively good fit.
+
+
+In terms of model diagnostics:
+
+- Weighted Ljung-Box test on standardized residuals: The p-values for all lag orders are greater than 0.05, indicating no significant serial correlation in the residuals.
+- Weighted Ljung-Box test on standardized squared residuals: The p-values for all lag orders are greater than 0.05, suggesting no significant ARCH effects.
+- Weighted ARCH LM tests: The p-values for all lag orders are greater than 0.05, indicating no significant ARCH effects.
+- Nyblom stability test: The joint statistic and individual statistics for the model parameters are not significant, indicating parameter stability.
+- Sign Bias test: The t-value for the Sign Bias is 2.3940 with a p-value of 0.01694, indicating a significant sign bias.
+
+
+
+
+```{r}
+# Conduct model diagnostic testing
+Box.test(fit@fit$residuals)
+```
+
+the Box-Pierce test resulted in a test statistic of 0.061244 with 1 degree of freedom and a p-value of 0.8045. Since the p-value is greater than the significance level (commonly 0.05), we do not have enough evidence to reject the null hypothesis. This suggests that there is no significant autocorrelation in the residuals of the GARCH (1,1) model.
+
+```{r}
+ggtsdisplay(fit@fit$residuals)
+```
+
+ time series plot of the standardized residuals of the GARCH model. It helps us visualize any remaining patterns or autocorrelation in the residuals. In this case, the plot shows the standardized residuals over time. Ideally, we would like to see a random pattern with no apparent structure or significant deviations from zero, indicating that the model captures the underlying dynamics well.
+ 
+```{r}
+qqnorm(fit@fit$residuals)
+qqline(fit@fit$residuals)
+```
+
+ The qqline plot shows that the majority of the points on the QQ plot roughly follow the reference line, indicating that the residuals are approximately normally distributed. However, there are some deviations in the tails, suggesting some departures from normality.
+
+```{r}
+forc <- ugarchforecast(fit,10)
+forecast_diff <- forc@forecast$seriesFor
+last_observed <- stock$Price[length(stock$Price)]
+forecast_original <- cumsum(c(last_observed, forecast_diff))
+```
+
+generates a forecast for the original series based on the GARCH model. 
+```{r}
+# Print the forecasted values of the original series
+print(forecast_original)
+```
+
+
+
+## Q2
+
+
+a.
+
+```{r}
+quarterly <- read_excel("quarterly.xls")
+
+# Extract the necessary variables
+delta_lipt <- diff(log(quarterly$IndProd))
+inft <- diff(log(quarterly$CPI))
+
+# Perform ADF test
+adf_delta_lipt <- adf.test(delta_lipt)
+adf_inft <- adf.test(inft)
+
+
+# Print the test results
+cat("ADF test for Δlipt:\n")
+print(adf_delta_lipt)
+
+cat("\nADF test for inft:\n")
+print(adf_inft)
+
+
+```
+ 
+
+
+ADF test for Δlipt:
+
+- Dickey-Fuller statistic: -5.468
+- Lag order: 5
+-p-value: 0.01
+- Conclusion: The p-value of 0.01 is below the significance level of 0.05, suggesting that Δlipt is stationary.
+
+ADF test for inft:
+
+- Dickey-Fuller statistic: -2.9091
+- Lag order: 5
+- p-value: 0.1949
+- Conclusion: The p-value of 0.1949 is above the significance level of 0.05, indicating that inft is not stationary.
+
+
+
+Based on these results, it appears that Δlipt is stationary, while inft is not stationary.
+
+
+
+
+b.
+
+
+```{r}
+
+# Extract the necessary variables
+delta_lipt <- diff(log(quarterly$IndProd))
+inft <- diff(log(quarterly$CPI))
+
+# Create a data frame with the variables
+data <- data.frame(delta_lipt, inft)
+
+# Specify the lag order
+lag_order <- 3
+
+# Estimate the VAR model
+var_model <- VAR(data, p = lag_order, type = "const")
+
+# Save the residuals
+residuals <- residuals(var_model)
+
+# Print the summary of the VAR model
+summary(var_model)
+
+```
+
+check which lag order is selected by the SBC, AIC, and the general-to-specific method
+
+```{r}
+VARselect(data, lag.max = 5, type = "const")
+```
+
+Therefore, there is a discrepancy between the AIC criterion, which selects a lag order of 5, and the SBC, HQ, and FPE criteria, which select a lag order of 3. The general-to-specific method could be used to determine the appropriate lag order in this case.
+
+
+
+c.
+
+
+```{r}
+
+# Perform the Granger causality tests
+causality(var_model, cause = "inft")
+causality(var_model, cause = "delta_lipt")
+```
+
+Both tests support the presence of Granger causality in both directions: inflation Granger-causes industrial production and industrial production Granger-causes inflation. The provided F-statistics and significance levels match the given information.
+
+
+
+
+
+d.
+
+```{r}
+
+# Calculate variance decompositions
+var_decomp <- irf(var_model,  response = "inft", boot = FALSE)
+
+# Extract the variance decompositions at different horizons
+var_decomp_values <- var_decomp$irf
+
+# Print the variance decompositions
+cat("Proportion due to Δlipt shock (%)   inft shock (%)\n")
+cat("Horizon Δlipt inft Δlipt inft\n")
+
+for (horizon in c(1, 4, 8)) {
+  prop_delta_lipt <- var_decomp_values$delta_lipt[horizon] * 10000
+  prop_inft <- var_decomp_values$inft[horizon] * 10000
+  prop_delta_lipt_complement <- 100 - prop_delta_lipt
+  prop_inft_complement <- 100 - prop_inft
+  
+  cat(horizon, " ", prop_delta_lipt, " ", prop_inft, " ", prop_delta_lipt_complement, " ", prop_inft_complement, "\n")
+}
+
+```
+
+e.
+
+
+
+```{r}
+delta_lipt = var_decomp_values$delta_lipt
+inft = var_decomp_values$inft
+
+# Create a data frame with Δlipt and inft
+data <- data.frame(delta_lipt = delta_lipt, inft = inft)
+
+# Scatter plot
+ggplot(data, aes(x = delta_lipt, y = inft)) +
+  geom_point() +
+  labs(x = "Δlipt (Industrial Production)", y = "inft (Inflation)") +
+  ggtitle("Relationship between Industrial Production and Inflation")
+```
+
+Industrial production（ Δ There is a significant causal relationship between lift and inflation (inft). The positive impact of industrial production leads to an increase in inflation, while the positive impact of inflation leads to a decrease in industrial production. This model is consistent with the standard aggregate supply/total demand model.
+
+
+
+
+f.  
+
+```{r}
+plot(var_decomp)
+```
+
+
+g.
+
+
+
+
+(i) An aggregate supply shock increases output and decreases inflation: When there is a positive aggregate supply shock, such as an increase in productivity or a decrease in production costs, it leads to an expansion of the economy's capacity to produce goods and services. This increase in aggregate supply results in higher output levels, as firms are able to produce more at a lower cost. At the same time, increased production and supply can put downward pressure on prices, leading to a decrease in inflation.
+
+(ii) An aggregate demand shock increases inflation and short-run output: When there is a positive aggregate demand shock, such as an increase in consumer spending or government expenditure, it stimulates overall demand for goods and services. This increased demand puts upward pressure on prices, leading to inflationary pressures. In the short run, firms respond to the higher demand by increasing production and output to meet the increased consumer demand, resulting in an increase in short-run output.
+
+(iii) An aggregate demand shock has no effect on output in the long run: In the long run, the economy adjusts to changes in aggregate demand through various mechanisms such as price adjustments, changes in production capacity, and resource allocation. If there is a persistent increase in aggregate demand, it can lead to higher inflationary pressures in the long run, but it does not have a sustained impact on the economy's output potential. This is because the economy's output is primarily determined by factors such as technological progress, labor force growth, and capital accumulation, which are independent of aggregate demand fluctuations.
+
+
+
+

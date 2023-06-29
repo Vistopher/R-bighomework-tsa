@@ -1,0 +1,7 @@
+"0","# 拟合ARMA模型并获取残差"
+"0","arma_model <- arima(stock$PriceChange, order = c(2,0,3))  # 使用适当的p、d、q值"
+"0","re <- residuals(arma_model)  # 获取ARMA模型的残差"
+"0",""
+"0","# 计算残差平方"
+"0","re_2 <- re^2"
+"0","ts.re_2<-ts(re_2)"

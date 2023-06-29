@@ -1,0 +1,2 @@
+"0","library(xts)"
+"0","ts.stock <- xts(stock$PriceChange, stock$Date)"

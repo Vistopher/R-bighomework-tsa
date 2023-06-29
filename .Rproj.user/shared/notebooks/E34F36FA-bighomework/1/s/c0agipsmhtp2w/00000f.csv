@@ -1,0 +1,7 @@
+"0","coef_matrix <- coef(var_model)$varresult$A  # 获取估计的系数矩阵"
+"0",""
+"0","# 将系数矩阵转换为数值矩阵"
+"0","coef_matrix_numeric <- matrix(as.numeric(coef_matrix), nrow = ncol(coef_matrix), byrow = TRUE)"
+"2","Error in matrix(as.numeric(coef_matrix), nrow = ncol(coef_matrix), byrow = TRUE) : 
+  non-numeric matrix extent
+"

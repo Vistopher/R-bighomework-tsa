@@ -1,0 +1,2 @@
+"0","quarterly <- read_excel(""quarterly.xls"")"
+"0","head(quarterly)"

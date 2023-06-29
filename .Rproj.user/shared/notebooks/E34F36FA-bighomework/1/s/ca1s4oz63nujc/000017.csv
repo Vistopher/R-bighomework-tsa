@@ -1,0 +1,3 @@
+"0","library(TSA)"
+"0","resr <- TSA::armasubsets(ts.stock, nar = 12, nma = 12)"
+"0","plot(resr)"
